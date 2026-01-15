@@ -31,3 +31,15 @@ function init_theme() {
 EOL
 sed -i -e '/boardname=/r /tmp/appendtext.txt' friendlywrt/target/linux/rockchip/armv8/base-files/root/setup.sh
 # }}
+
+# {{ Add AmneziaWG packages (kmod + tools + LuCI proto)
+(cd friendlywrt/package && {
+    [ -d awg-openwrt ] && rm -rf awg-openwrt
+    git clone https://github.com/Slava-Shchipunov/awg-openwrt.git --depth 1 -b master
+})
+cat >> configs/rockchip/01-nanopi <<EOL
+CONFIG_PACKAGE_kmod-amneziawg=y
+CONFIG_PACKAGE_amneziawg-tools=y
+CONFIG_PACKAGE_luci-proto-amneziawg=y
+EOL
+# }}
