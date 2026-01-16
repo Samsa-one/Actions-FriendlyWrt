@@ -128,11 +128,14 @@ jobs:
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile friendlyWrt
+      id: compile
+      continue-on-error: true
       run: |
         cd project/friendlywrt
         make -j$(nproc) || make -j1 V=s
 
     - name: Create rootfs package
+      id: create_rootfs_package
       run: |
         cd project
         source .current_config.mk
@@ -146,8 +149,8 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: ./artifact/${{ matrix.rootfs_filename }}
-        asset_name: ${{ matrix.rootfs_filename }}
+        file: ./artifact/${{ steps.create_rootfs_package.outputs.rootfs_filename }}
+        asset_name: ${{ steps.create_rootfs_package.outputs.rootfs_filename }}
         tag: ${{ needs.prepare_release.outputs.release_tag }}
         overwrite: true
 
@@ -277,6 +280,7 @@ jobs:
         ./build.sh kernel
 
     - name: Build sd image
+      id: build_sd_image
       run: |
         cd project
         ./build.sh sd-img
