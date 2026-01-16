@@ -40,6 +40,5 @@ sed -i -e '/boardname=/r /tmp/appendtext.txt' friendlywrt/target/linux/rockchip/
 cat >> configs/rockchip/01-nanopi <<EOL
 CONFIG_PACKAGE_kmod-amneziawg=y
 CONFIG_PACKAGE_amneziawg-tools=y
-CONFIG_PACKAGE_luci-proto-amneziawg=y
 EOL
 # }}
