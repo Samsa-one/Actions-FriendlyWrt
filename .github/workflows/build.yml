@@ -61,8 +61,9 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     strategy:
       matrix:
-        VERSION: ${{ inputs.version }}
-        SET: ${{ inputs.set }}
+        include:
+          - VERSION: ${{ inputs.version }}
+            SET: ${{ inputs.set }}
 
     steps:
     - name: Checkout
@@ -128,8 +129,6 @@ jobs:
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile friendlyWrt
-      id: compile
-      continue-on-error: true
       run: |
         cd project/friendlywrt
         make -j$(nproc) || make -j1 V=s
@@ -160,9 +159,10 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     strategy:
       matrix:
-        VERSION: ${{ inputs.version }}
-        CPU: ${{ inputs.cpu }}
-        SET: ${{ inputs.set }}
+        include:
+          - VERSION: ${{ inputs.version }}
+            CPU: ${{ inputs.cpu }}
+            SET: ${{ inputs.set }}
 
     steps:
     - name: Checkout
@@ -280,7 +280,6 @@ jobs:
         ./build.sh kernel
 
     - name: Build sd image
-      id: build_sd_image
       run: |
         cd project
         ./build.sh sd-img
