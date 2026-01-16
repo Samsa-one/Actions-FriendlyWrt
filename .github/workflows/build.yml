@@ -1,5 +1,38 @@
+name: Build FriendlyWrt with AmneziaWG (no luci-proto)
+
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'OpenWrt version'
+        required: true
+        default: '24.10'
+        type: choice
+        options:
+        - '23.05'
+        - '24.10'
+      cpu:
+        description: 'CPU / Model'
+        required: true
+        default: 'rk3576'
+        type: choice
+        options:
+        - rk3328
+        - rk3528
+        - rk3399
+        - rk3566
+        - rk3568
+        - rk3576
+        - rk3588
+      set:
+        description: 'Variant'
+        required: true
+        default: 'non-docker'
+        type: choice
+        options:
+        - non-docker
+        - docker
+
 jobs:
   prepare_release:
     runs-on: ubuntu-22.04
@@ -9,10 +42,9 @@ jobs:
       id: release_tag
       run: |
         release_tag="FriendlyWrt-$(date +%Y-%m-%d)"
-        echo "##[set-output name=release_tag;]$release_tag"
+        echo "release_tag=$release_tag" >> $GITHUB_OUTPUT
 
     - name: Create empty release
-      id: release
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -22,7 +54,6 @@ jobs:
         prerelease: false
     outputs:
       release_tag: ${{ steps.release_tag.outputs.release_tag }}
-      upload_url: ${{ steps.release.outputs.upload_url }}
 
   build_friendlywrt:
     needs: prepare_release
@@ -30,8 +61,8 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     strategy:
       matrix:
-        VERSION: ['23.05', '24.10']
-        SET: [docker, non-docker]
+        VERSION: ${{ inputs.version }}
+        SET: ${{ inputs.set }}
 
     steps:
     - name: Checkout
@@ -55,22 +86,21 @@ jobs:
         mkdir -p ./artifact
         sudo swapoff -a
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk /usr/local/share/boost /opt/ghc
-        echo "cores: $(nproc)"
 
     - name: Download source
       run: |
         mkdir project
         cd project
         repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ matrix.VERSION }} \
-                -m rk3399.xml --repo-url=https://github.com/friendlyarm/repo  --no-clone-bundle
+                -m ${{ inputs.cpu }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
 
         repo sync -c friendlywrt --no-clone-bundle
         repo sync -c configs --no-clone-bundle
         repo sync -c device/common --no-clone-bundle
         repo sync -c device/friendlyelec --no-clone-bundle
         repo sync -c scripts --no-clone-bundle
-        repo sync -c scripts/sd-fuse  --no-clone-bundle
-        repo sync -c toolchain  --no-clone-bundle
+        repo sync -c scripts/sd-fuse --no-clone-bundle
+        repo sync -c toolchain --no-clone-bundle
 
     - name: Apply customizations
       run: |
@@ -85,7 +115,7 @@ jobs:
         DIRNAME=friendlywrt$(echo ${{ matrix.VERSION }}|awk -F . '{print $1}')${SUFFIX}
         CONFIG=rockchip${SUFFIX}
         cat > .current_config.mk <<EOL
-        . device/friendlyelec/rk3399/base.mk
+        . device/friendlyelec/${{ inputs.cpu }}/base.mk
         TARGET_IMAGE_DIRNAME=${DIRNAME}
         TARGET_FRIENDLYWRT_CONFIG=${CONFIG}
         EOL
@@ -95,25 +125,14 @@ jobs:
       run: |
         cd project/friendlywrt
         make download -j8
-        find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile friendlyWrt
-      id: compile
-      continue-on-error: true
       run: |
         cd project/friendlywrt
         make -j$(nproc) || make -j1 V=s
-        echo $?
-
-    - name: Check the result and try again
-      if: steps.compile.outcome == 'failure'
-      run: |
-        cd project/friendlywrt
-        make -j1 V=s
 
     - name: Create rootfs package
-      id: create_rootfs_package
       run: |
         cd project
         source .current_config.mk
@@ -121,27 +140,27 @@ jobs:
         rootfs_filename="rootfs-friendlywrt-${{ matrix.VERSION }}${SUFFIX}.tgz"
         tar cvzf ../artifact/${rootfs_filename} ${FRIENDLYWRT_SRC}/${FRIENDLYWRT_ROOTFS} \
               ${FRIENDLYWRT_SRC}/${FRIENDLYWRT_PACKAGE_DIR}
-        echo "##[set-output name=rootfs_filename;]$rootfs_filename"
+        echo "rootfs_filename=$rootfs_filename" >> $GITHUB_OUTPUT
 
     - name: Upload rootfs package
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: ./artifact/${{ steps.create_rootfs_package.outputs.rootfs_filename }}
-        asset_name: ${{ steps.create_rootfs_package.outputs.rootfs_filename }}
+        file: ./artifact/${{ matrix.rootfs_filename }}
+        asset_name: ${{ matrix.rootfs_filename }}
         tag: ${{ needs.prepare_release.outputs.release_tag }}
         overwrite: true
 
   build_img:
-    needs: [prepare_release,build_friendlywrt]
+    needs: [prepare_release, build_friendlywrt]
     runs-on: ubuntu-22.04
     if: github.event.repository.owner.id == github.event.sender.id
-
     strategy:
       matrix:
-        VERSION: ['23.05', '24.10']
-        CPU: [rk3328, rk3528, rk3399, rk3566, rk3568, rk3576, rk3588]
-        SET: [docker, non-docker]
+        VERSION: ${{ inputs.version }}
+        CPU: ${{ inputs.cpu }}
+        SET: ${{ inputs.set }}
+
     steps:
     - name: Checkout
       uses: actions/checkout@main
@@ -164,14 +183,13 @@ jobs:
         mkdir -p ./artifact
         sudo swapoff -a
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk /usr/local/share/boost /opt/ghc
-        echo "cores: $(nproc)"
 
     - name: Download source
       run: |
         mkdir project
         cd project
         repo init --depth=1 -u https://github.com/friendlyarm/friendlywrt_manifests -b master-v${{ matrix.VERSION }} \
-                -m ${{ matrix.CPU }}.xml --repo-url=https://github.com/friendlyarm/repo  --no-clone-bundle
+                -m ${{ matrix.CPU }}.xml --repo-url=https://github.com/friendlyarm/repo --no-clone-bundle
 
         repo sync -c kernel --no-clone-bundle
         repo sync -c u-boot --no-clone-bundle
@@ -180,8 +198,8 @@ jobs:
         repo sync -c device/common --no-clone-bundle
         repo sync -c device/friendlyelec --no-clone-bundle
         repo sync -c scripts --no-clone-bundle
-        repo sync -c scripts/sd-fuse  --no-clone-bundle
-        repo sync -c toolchain  --no-clone-bundle
+        repo sync -c scripts/sd-fuse --no-clone-bundle
+        repo sync -c toolchain --no-clone-bundle
 
     - name: Download friendlywrt rootfs (non-docker)
       if: matrix.SET == 'non-docker'
@@ -230,7 +248,7 @@ jobs:
           MODEL=T6-R6S-R6C-M6-Series
           ;;
         *)
-          echo "unknow cpu"
+          echo "unknown cpu"
           exit 1
           ;;
         esac
@@ -244,7 +262,7 @@ jobs:
         TARGET_FRIENDLYWRT_CONFIG=${CONFIG}
         TARGET_SD_RAW_FILENAME=${FILENAME}
         EOL
-        echo "##[set-output name=img_filename;]$FILENAME"
+        echo "img_filename=$FILENAME" >> $GITHUB_OUTPUT
 
     - name: Unpack friendlywrt rootfs
       run: |
@@ -255,21 +273,10 @@ jobs:
     - name: Compile uboot and kernel
       run: |
         cd project
-        ## If you need to modify the kernel configuration, please edit the script below
-        # source ../scripts/custome_kernel_config.sh
-
         ./build.sh uboot
         ./build.sh kernel
 
-        ## If you want to compile a driver from source, here is an example
-        # case ${{ matrix.CPU }} in
-        # rk3568)
-        #     ../scripts/3rd/add_r8125.sh
-        #     ;;
-        # esac
-
     - name: Build sd image
-      id: build_sd_image
       run: |
         cd project
         ./build.sh sd-img
@@ -285,4 +292,3 @@ jobs:
         asset_name: ${{ steps.config.outputs.img_filename }}.gz
         tag: ${{ needs.prepare_release.outputs.release_tag }}
         overwrite: true
-
