@@ -116,6 +116,12 @@ jobs:
         rm -rf kernel
         git clone https://github.com/friendlyarm/kernel-rockchip.git kernel --depth 1 -b ${{ inputs.kernel_branch }}
 
+    - name: Clean kernel cache after BSP override
+      if: inputs.kernel_branch != ''
+      run: |
+        cd project/friendlywrt
+        make target/linux/clean V=s
+
     - name: Debug kernel version after override
       run: |
         cd project/kernel || cd project
@@ -230,6 +236,12 @@ jobs:
         echo "Overriding kernel with branch: ${{ inputs.kernel_branch }}"
         rm -rf kernel
         git clone https://github.com/friendlyarm/kernel-rockchip.git kernel --depth 1 -b ${{ inputs.kernel_branch }}
+
+    - name: Clean kernel cache after BSP override
+      if: inputs.kernel_branch != ''
+      run: |
+        cd project/friendlywrt
+        make target/linux/clean V=s
 
     - name: Debug kernel version after override
       run: |
