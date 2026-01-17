@@ -11,6 +11,11 @@ on:
         options:
         - '23.05'
         - '24.10'
+      kernel_branch:
+        description: 'Kernel branch form friendlyarm/kernel-rockchip repo (e.g. nanopi6-v6.1.y for 6.1 kernel; leave empty for upstream from OpenWrt 6.6 kernel)'
+        required: false
+        default: ''
+        type: string
       cpu:
         description: 'CPU / Model'
         required: true
@@ -32,7 +37,7 @@ on:
         options:
         - non-docker
         - docker
-
+      
 jobs:
   prepare_release:
     runs-on: ubuntu-22.04
@@ -102,6 +107,13 @@ jobs:
         repo sync -c scripts --no-clone-bundle
         repo sync -c scripts/sd-fuse --no-clone-bundle
         repo sync -c toolchain --no-clone-bundle
+
+    - name: Override kernel with BSP branch (if specified)
+      if: inputs.kernel_branch != ''
+      run: |
+        cd project
+        rm -rf kernel
+        git clone https://github.com/friendlyarm/kernel-rockchip.git kernel --depth 1 -b ${{ inputs.kernel_branch }}
 
     - name: Apply customizations
       run: |
@@ -203,6 +215,13 @@ jobs:
         repo sync -c scripts --no-clone-bundle
         repo sync -c scripts/sd-fuse --no-clone-bundle
         repo sync -c toolchain --no-clone-bundle
+
+    - name: Override kernel with BSP branch (if specified)
+      if: inputs.kernel_branch != ''
+      run: |
+        cd project
+        rm -rf kernel
+        git clone https://github.com/friendlyarm/kernel-rockchip.git kernel --depth 1 -b ${{ inputs.kernel_branch }}
 
     - name: Download friendlywrt rootfs (non-docker)
       if: matrix.SET == 'non-docker'
