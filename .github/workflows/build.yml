@@ -12,7 +12,7 @@ on:
         - '23.05'
         - '24.10'
       kernel_branch:
-        description: 'Kernel branch form friendlyarm/kernel-rockchip repo (e.g. nanopi6-v6.1.y for 6.1 kernel; leave empty for upstream from OpenWrt 6.6 kernel)'
+        description: 'Kernel branch from friendlyarm/kernel-rockchip repo (e.g. nanopi6-v6.1.y for 6.1 kernel; leave empty for upstream from OpenWrt 6.6 kernel)'
         required: false
         default: ''
         type: string
@@ -112,8 +112,15 @@ jobs:
       if: inputs.kernel_branch != ''
       run: |
         cd project
+        echo "Overriding kernel with branch: ${{ inputs.kernel_branch }}"
         rm -rf kernel
         git clone https://github.com/friendlyarm/kernel-rockchip.git kernel --depth 1 -b ${{ inputs.kernel_branch }}
+
+    - name: Debug kernel version after override
+      run: |
+        cd project/kernel || cd project
+        git branch || echo "No git branch (default kernel)"
+        git log -1 || echo "No git log"
 
     - name: Apply customizations
       run: |
@@ -220,8 +227,15 @@ jobs:
       if: inputs.kernel_branch != ''
       run: |
         cd project
+        echo "Overriding kernel with branch: ${{ inputs.kernel_branch }}"
         rm -rf kernel
         git clone https://github.com/friendlyarm/kernel-rockchip.git kernel --depth 1 -b ${{ inputs.kernel_branch }}
+
+    - name: Debug kernel version after override
+      run: |
+        cd project/kernel || cd project
+        git branch || echo "No git branch"
+        git log -1 || echo "No git log"
 
     - name: Download friendlywrt rootfs (non-docker)
       if: matrix.SET == 'non-docker'
