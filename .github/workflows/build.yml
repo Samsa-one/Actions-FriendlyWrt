@@ -120,7 +120,11 @@ jobs:
       if: inputs.kernel_branch != ''
       run: |
         cd project/friendlywrt
-        make target/linux/clean V=s
+        rm -rf build_dir/target-aarch64_generic_musl/linux*
+        rm -rf staging_dir/target-aarch64_generic_musl/pkginfo/linux
+        rm -rf bin/targets/rockchip/armv8/packages/kmod-*
+        rm -rf tmp
+        echo "Kernel cache cleaned manually"
 
     - name: Debug kernel version after override
       run: |
@@ -241,7 +245,11 @@ jobs:
       if: inputs.kernel_branch != ''
       run: |
         cd project/friendlywrt
-        make target/linux/clean V=s
+        rm -rf build_dir/target-aarch64_generic_musl/linux*
+        rm -rf staging_dir/target-aarch64_generic_musl/pkginfo/linux
+        rm -rf bin/targets/rockchip/armv8/packages/kmod-*
+        rm -rf tmp
+        echo "Kernel cache cleaned manually"
 
     - name: Debug kernel version after override
       run: |
