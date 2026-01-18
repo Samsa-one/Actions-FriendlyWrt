@@ -107,6 +107,9 @@ jobs:
         repo sync -c scripts --no-clone-bundle
         repo sync -c scripts/sd-fuse --no-clone-bundle
         repo sync -c toolchain --no-clone-bundle
+        repo sync -c kernel --no-clone-bundle
+        repo sync -c u-boot --no-clone-bundle
+        repo sync -c rkbin --no-clone-bundle
 
     - name: Override kernel with BSP branch (if specified)
       if: inputs.kernel_branch != ''
@@ -146,23 +149,25 @@ jobs:
         DEBUG_DOT_CONFIG=1 ./build.sh friendlywrt
 
     - name: Compile BSP kernel (after config is ready)
-      if: inputs.kernel_branch != ''
+      if: inputs.kernel_branch != '' || true  # Всегда компилируем, чтобы гарантировать правильные headers/modules
       run: |
         cd project
         ./build.sh kernel
-        echo "BSP kernel compiled and installed"
+        echo "Kernel compiled and installed"
 
-    - name: Debug kernel version
+    - name: Debug kernel version (extended)
       run: |
         cd project
-        echo "Current kernel branch/tag:"
-        cd kernel && git branch && git log -1 && cd ..
-        echo "Compiled kernel Image exists?"
-        ls -l out/Image || echo "No out/Image"
-        echo "Kernel version from config (if available):"
-        grep CONFIG_LOCALVERSION friendlywrt/.config || echo "Not found"
-        echo "Kernel release (if built):"
-        cat out/kernel-release 2>/dev/null || echo "Not found"
+        echo "Kernel repo status:"
+        ls -l kernel || echo "No kernel dir"
+        cd kernel && git branch && git log -1 && cd .. || echo "No git in kernel"
+        echo "OpenWrt target kernel patchver:"
+        grep PATCHVER friendlywrt/target/linux/rockchip/Makefile || echo "Not found"
+        grep KERNEL friendlywrt/target/linux/rockchip/Makefile || echo "Not found"
+        echo "Compiled modules version (from BSP):"
+        ls scripts/sd-fuse/out/output_*_kmodules/lib/modules/ || echo "No BSP modules"
+        echo "OpenWrt config kernel version:"
+        grep CONFIG_KERNEL friendlywrt/.config || true
 
     - name: Download package
       run: |
@@ -174,6 +179,13 @@ jobs:
       run: |
         cd project/friendlywrt
         make -j$(nproc) || make -j1 V=s
+
+    - name: Debug AmneziaWG vermagic (final check)
+      run: |
+        cd project/friendlywrt
+        echo "Compiled kmod-amneziawg packages:"
+        ls -l bin/targets/rockchip/armv8/packages/*amneziawg* || echo "Not found yet"
+        find bin/targets/rockchip/armv8/packages -name "*amneziawg*.ipk" -exec sh -c 'echo "=== {} ==="; unzip -p {} control.tar.gz | tar -xz ./control 2>/dev/null; cat ./control 2>/dev/null; echo "Vermagic:"; modinfo $(unzip -p {} *.ko) | grep vermagic || echo "No ko"' \;
 
     - name: Create rootfs package
       id: create_rootfs_package
