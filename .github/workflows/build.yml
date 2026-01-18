@@ -126,23 +126,6 @@ jobs:
         rm -rf tmp
         echo "Kernel cache cleaned manually"
 
-    - name: Compile BSP kernel (to setup correct headers and vermagic)
-      if: inputs.kernel_branch != ''
-      run: |
-        cd project
-        ./build.sh kernel
-        echo "BSP kernel compiled and installed"
-
-    - name: Debug kernel version after override/compile
-      run: |
-        cd project/kernel || cd project
-        git branch || echo "No git branch (default kernel)"
-        git log -1 || echo "No git log"
-        # Дополнительный дебаг: если ядро скомпилировано, можно посмотреть версию
-        if [ -f project/out/Image ]; then
-          echo "Compiled kernel Image exists"
-        fi
-
     - name: Apply customizations
       run: |
         cd project
@@ -161,6 +144,25 @@ jobs:
         TARGET_FRIENDLYWRT_CONFIG=${CONFIG}
         EOL
         DEBUG_DOT_CONFIG=1 ./build.sh friendlywrt
+
+    - name: Compile BSP kernel (after config is ready)
+      if: inputs.kernel_branch != ''
+      run: |
+        cd project
+        ./build.sh kernel
+        echo "BSP kernel compiled and installed"
+
+    - name: Debug kernel version
+      run: |
+        cd project
+        echo "Current kernel branch/tag:"
+        cd kernel && git branch && git log -1 && cd ..
+        echo "Compiled kernel Image exists?"
+        ls -l out/Image || echo "No out/Image"
+        echo "Kernel version from config (if available):"
+        grep CONFIG_LOCALVERSION friendlywrt/.config || echo "Not found"
+        echo "Kernel release (if built):"
+        cat out/kernel-release 2>/dev/null || echo "Not found"
 
     - name: Download package
       run: |
