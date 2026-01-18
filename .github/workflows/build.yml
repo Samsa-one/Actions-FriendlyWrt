@@ -149,25 +149,35 @@ jobs:
         DEBUG_DOT_CONFIG=1 ./build.sh friendlywrt
 
     - name: Compile BSP kernel (after config is ready)
-      if: inputs.kernel_branch != '' || true  # Всегда компилируем, чтобы гарантировать правильные headers/modules
       run: |
         cd project
         ./build.sh kernel
-        echo "Kernel compiled and installed"
+        echo "BSP kernel compiled and installed"
 
-    - name: Debug kernel version (extended)
+    - name: Force OpenWrt to use local BSP kernel tree
       run: |
-        cd project
-        echo "Kernel repo status:"
-        ls -l kernel || echo "No kernel dir"
-        cd kernel && git branch && git log -1 && cd .. || echo "No git in kernel"
-        echo "OpenWrt target kernel patchver:"
-        grep PATCHVER friendlywrt/target/linux/rockchip/Makefile || echo "Not found"
-        grep KERNEL friendlywrt/target/linux/rockchip/Makefile || echo "Not found"
-        echo "Compiled modules version (from BSP):"
-        ls scripts/sd-fuse/out/output_*_kmodules/lib/modules/ || echo "No BSP modules"
-        echo "OpenWrt config kernel version:"
-        grep CONFIG_KERNEL friendlywrt/.config || true
+        cd project/friendlywrt
+        # Удаляем internal upstream kernel dir
+        rm -rf build_dir/target-aarch64_generic_musl/linux-rockchip_armv8
+        # Symlink на наш BSP kernel
+        ln -s ../../../../kernel build_dir/target-aarch64_generic_musl/linux-rockchip_armv8
+        # Чистим и prepare/install из local tree
+        make target/linux/clean
+        make target/linux/prepare V=s
+        make target/linux/install V=s
+        echo "Local BSP kernel tree forced"
+
+    - name: Debug kernel version after force local tree
+      run: |
+        cd project/friendlywrt
+        echo "Kernel source dir:"
+        ls -l build_dir/target-aarch64_generic_musl/linux-rockchip_armv8 | head
+        echo "Kernel version from Makefile:"
+        grep VERSION build_dir/target-aarch64_generic_musl/linux-rockchip_armv8/Makefile | head -3
+        echo "Vermagic file (should be 6.1.141...):"
+        cat build_dir/target-aarch64_generic_musl/linux-rockchip_armv8/.vermagic 2>/dev/null || echo "Not yet"
+        echo "Sample base module vermagic:"
+        find staging_dir -name "*.ko" -exec modinfo {} \; | grep vermagic | head -5 || echo "No modules yet"
 
     - name: Download package
       run: |
@@ -180,12 +190,11 @@ jobs:
         cd project/friendlywrt
         make -j$(nproc) || make -j1 V=s
 
-    - name: Debug AmneziaWG vermagic (final check)
+    - name: Debug AmneziaWG vermagic (final)
       run: |
         cd project/friendlywrt
-        echo "Compiled kmod-amneziawg packages:"
-        ls -l bin/targets/rockchip/armv8/packages/*amneziawg* || echo "Not found yet"
-        find bin/targets/rockchip/armv8/packages -name "*amneziawg*.ipk" -exec sh -c 'echo "=== {} ==="; unzip -p {} control.tar.gz | tar -xz ./control 2>/dev/null; cat ./control 2>/dev/null; echo "Vermagic:"; modinfo $(unzip -p {} *.ko) | grep vermagic || echo "No ko"' \;
+        ls -l bin/targets/rockchip/armv8/packages/*amneziawg* || echo "No ipk yet"
+        find bin/targets/rockchip/armv8/packages -name "*amneziawg*.ipk" -exec sh -c 'echo "=== {} ==="; modinfo $(unzip -l {} | grep "\.ko$" | awk "{print \$4}") | grep vermagic || echo "No ko/extract issue"' \;
 
     - name: Create rootfs package
       id: create_rootfs_package
