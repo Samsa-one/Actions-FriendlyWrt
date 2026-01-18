@@ -154,30 +154,32 @@ jobs:
         ./build.sh kernel
         echo "BSP kernel compiled and installed"
 
-    - name: Force OpenWrt to use local BSP kernel tree
+    - name: Force OpenWrt to use local BSP kernel tree (rockchip/armv8 structure)
       run: |
         cd project/friendlywrt
-        # Удаляем internal upstream kernel dir
-        rm -rf build_dir/target-aarch64_generic_musl/linux-rockchip_armv8
-        # Symlink на наш BSP kernel
-        ln -s ../../../../kernel build_dir/target-aarch64_generic_musl/linux-rockchip_armv8
-        # Чистим и prepare/install из local tree
         make target/linux/clean
+        # Отключаем патчи OpenWrt (они для 6.6, не применятся к 6.1)
+        mv target/linux/rockchip/patches-6.6 target/linux/rockchip/patches-6.6.disabled || true
+        # Создаём правильную структуру и symlink на BSP-ядро
+        mkdir -p build_dir/target-aarch64_generic_musl/linux-rockchip
+        rm -rf build_dir/target-aarch64_generic_musl/linux-rockchip/armv8
+        ln -s ../../../../../kernel build_dir/target-aarch64_generic_musl/linux-rockchip/armv8
+        # Prepare и install headers/modules из BSP
         make target/linux/prepare V=s
         make target/linux/install V=s
-        echo "Local BSP kernel tree forced"
+        echo "Local BSP kernel tree (6.1) forced, patches disabled"
 
-    - name: Debug kernel version after force local tree
+    - name: Debug kernel version after force
       run: |
         cd project/friendlywrt
-        echo "Kernel source dir:"
-        ls -l build_dir/target-aarch64_generic_musl/linux-rockchip_armv8 | head
-        echo "Kernel version from Makefile:"
-        grep VERSION build_dir/target-aarch64_generic_musl/linux-rockchip_armv8/Makefile | head -3
-        echo "Vermagic file (should be 6.1.141...):"
-        cat build_dir/target-aarch64_generic_musl/linux-rockchip_armv8/.vermagic 2>/dev/null || echo "Not yet"
-        echo "Sample base module vermagic:"
-        find staging_dir -name "*.ko" -exec modinfo {} \; | grep vermagic | head -5 || echo "No modules yet"
+        echo "Kernel source structure:"
+        ls -l build_dir/target-aarch64_generic_musl/linux-rockchip/
+        echo "Kernel Makefile version:"
+        grep "^VERSION" build_dir/target-aarch64_generic_musl/linux-rockchip/armv8/Makefile | head -3
+        echo "Vermagic file:"
+        cat build_dir/target-aarch64_generic_musl/linux-rockchip/armv8/.vermagic 2>/dev/null || echo "Not created yet"
+        echo "Sample modules vermagic:"
+        find staging_dir -name "*.ko" -exec modinfo {} \; | grep vermagic | head || echo "No modules"
 
     - name: Download package
       run: |
@@ -193,8 +195,9 @@ jobs:
     - name: Debug AmneziaWG vermagic (final)
       run: |
         cd project/friendlywrt
-        ls -l bin/targets/rockchip/armv8/packages/*amneziawg* || echo "No ipk yet"
-        find bin/targets/rockchip/armv8/packages -name "*amneziawg*.ipk" -exec sh -c 'echo "=== {} ==="; modinfo $(unzip -l {} | grep "\.ko$" | awk "{print \$4}") | grep vermagic || echo "No ko/extract issue"' \;
+        echo "Compiled AmneziaWG packages:"
+        ls -l bin/targets/rockchip/armv8/packages/*amneziawg* || echo "None"
+        find bin/targets/rockchip/armv8/packages -name "*amneziawg*.ipk" -exec sh -c 'echo "=== Package: {} ==="; unzip -p {} *.ko 2>/dev/null | modinfo - | grep vermagic || echo "No .ko or error"' \; 
 
     - name: Create rootfs package
       id: create_rootfs_package
